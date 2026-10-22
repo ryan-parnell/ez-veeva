@@ -1,7 +1,7 @@
   // ==UserScript==
   // @name         EZ Veeva Helper
   // @namespace    http://tampermonkey.net/
-  // @version      2026-10-22.01
+  // @version      2026-10-22.02
   // @homepageURL  https://github.com/ryan-parnell/ez-veeva
   // @supportURL   https://github.com/ryan-parnell/ez-veeva/issues
   // @updateURL    https://raw.githubusercontent.com/ryan-parnell/ez-veeva/main/ez-veeva.user.js
@@ -1024,23 +1024,46 @@
       const INPUT_TYPE_LABELS = { gdms: 'GDMS ID', veevaId: 'Veeva ID', docNumber: 'Document #' };
       let findLookupActive = false;
       let findLastResults = [];
-      function getSessionId() {
-          return new Promise((resolve, reject) => {
-              const fromDocumentCookie = () => {
-                  const match = document.cookie.match(/(?:^|;\s*)TK=([^;]+)/);
-                  return match ? decodeURIComponent(match[1]) : null;
-              };
-              if (typeof GM_cookie === 'function') {
-                  GM_cookie('list', { name: 'TK' }, (cookies, error) => {
-                      if (!error && cookies && cookies.length) return resolve(cookies[0].value);
-                      const fallback = fromDocumentCookie();
-                      fallback ? resolve(fallback) : reject(new Error('Session ID (TK cookie) not found.'));
-                  });
-                  return;
+      async function getSessionId() {
+          const fromDocumentCookie = () => {
+              const match = document.cookie.match(/(?:^|;\s*)TK=([^;]+)/);
+              return match ? decodeURIComponent(match[1]) : null;
+          };
+
+          // First try Tampermonkey's modern cookie API. Unlike document.cookie,
+          // this can read the TK cookie even when Vault marks it HttpOnly.
+          try {
+              if (typeof GM !== 'undefined' && GM.cookie && typeof GM.cookie.list === 'function') {
+                  const cookies = await GM.cookie.list({ name: 'TK', url: window.location.href });
+                  const match = Array.isArray(cookies) ? cookies.find(cookie => cookie && cookie.name === 'TK') : null;
+                  if (match && match.value) return match.value;
               }
-              const fallback = fromDocumentCookie();
-              fallback ? resolve(fallback) : reject(new Error('Session ID (TK cookie) not found.'));
-          });
+          } catch (error) {
+              console.warn('[EZ Veeva Helper] GM.cookie could not read the TK cookie:', error);
+          }
+
+          // Fall back to the legacy callback API for older Tampermonkey versions.
+          if (typeof GM_cookie === 'function') {
+              const legacyValue = await new Promise(resolve => {
+                  try {
+                      GM_cookie('list', { name: 'TK', url: window.location.href }, (cookies, error) => {
+                          if (!error && Array.isArray(cookies)) {
+                              const match = cookies.find(cookie => cookie && cookie.name === 'TK');
+                              if (match && match.value) return resolve(match.value);
+                          }
+                          resolve(null);
+                      });
+                  } catch (error) {
+                      resolve(null);
+                  }
+              });
+              if (legacyValue) return legacyValue;
+          }
+
+          // Last resort for Vault configurations where TK is readable by page JavaScript.
+          const fallback = fromDocumentCookie();
+          if (fallback) return fallback;
+          throw new Error('Could not read the Vault session cookie (TK). Reload Veeva and try again.');
       }
       async function vaultApi(path, options = {}) {
           const sessionId = await getSessionId();

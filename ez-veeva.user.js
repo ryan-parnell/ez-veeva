@@ -1,7 +1,7 @@
   // ==UserScript==
   // @name         EZ Veeva Helper
   // @namespace    http://tampermonkey.net/
-  // @version      2026-10-13.03
+  // @version      2026-10-22.01
   // @homepageURL  https://github.com/ryan-parnell/ez-veeva
   // @supportURL   https://github.com/ryan-parnell/ez-veeva/issues
   // @updateURL    https://raw.githubusercontent.com/ryan-parnell/ez-veeva/main/ez-veeva.user.js
@@ -31,7 +31,7 @@
           { key: 'batchCopy', label: 'Copy first matching links (1000 / 5000)', description: 'Copies links for the first N documents in the current search.' },
           { key: 'pageSize', label: 'Custom page sizes', description: '5/25/50/100 results-per-page selector (reloads the page).' },
           { key: 'findById', label: 'Find By ID', requiresApi: true, description: 'Adds a Find By ID button next to the search bar that finds documents by Veeva ID, document number or legacy Documentum object/chronicle ID.' },
-          { key: 'relatedDocs', label: 'Related Documents menu', requiresApi: true, description: 'Adds a Related Documents item to the document actions (\u22EF) menu that finds all related documents' }
+          { key: 'relatedDocs', label: 'All Related Documents menu', requiresApi: true, description: 'Adds an All Related Documents item to the document actions (\u22EF) menu that finds related documents in both directions.' }
       ];
       function getFeatureSettings() {
           const defaults = {};
@@ -2336,8 +2336,8 @@
           if (findLastResults.length) renderResults(findLastResults);
           input.focus();
       }
-      // ---- Related Documents (document actions menu) -------------------------
-      // Adds a "Related Documents" item to the document actions (three dots)
+      // ---- All Related Documents (document actions menu) -------------------------
+      // Adds an "All Related Documents" item to the document actions (three dots)
       // menu, between "Where Used" and "Version History". It runs a VQL query on
       // the relationships object for the document version the menu belongs to
       // and shows the related documents in the same report window style as
@@ -2452,7 +2452,16 @@
           const path = document.createElementNS(svgNS, 'path');
           path.setAttribute('fill', 'currentColor');
           path.setAttribute('d', RELATED_ICON_PATH);
-          svg.appendChild(path);
+          // Overlay a compact two-headed horizontal arrow to make the
+          // source/target (bi-directional) relationship search obvious.
+          const arrows = document.createElementNS(svgNS, 'path');
+          arrows.setAttribute('d', 'M120 368 H264 M120 368 L148 340 M120 368 L148 396 M264 368 L236 340 M264 368 L236 396');
+          arrows.setAttribute('fill', 'none');
+          arrows.setAttribute('stroke', 'currentColor');
+          arrows.setAttribute('stroke-width', '24');
+          arrows.setAttribute('stroke-linecap', 'round');
+          arrows.setAttribute('stroke-linejoin', 'round');
+          svg.append(path, arrows);
           return svg;
       }
 
@@ -2476,9 +2485,9 @@
           item.classList.add(RELATED_MENU_ITEM_CLASS);
           item.id = `ez-related-docs-menu-item-${Date.now()}`;
           item.dataset.value = 'EzRelatedDocuments';
-          item.setAttribute('aria-label', 'Related Documents');
+          item.setAttribute('aria-label', 'All Related Documents');
           item.setAttribute('aria-selected', 'false');
-          item.title = 'EZ Veeva Helper: list all documents related to this document version';
+          item.title = 'EZ Veeva Helper: list all documents related to this document version in both directions';
           item.querySelectorAll('.vv-action-bar-menu-item-key-combo').forEach(n => n.remove());
           const label = item.querySelector('.vv-action-bar-menu-item-label') || item;
           const iconBox = label.querySelector('.vv-action-bar-menu-icon-container');
@@ -2493,7 +2502,7 @@
               box.appendChild(makeRelatedDocsIcon(null));
               label.appendChild(box);
           }
-          label.appendChild(document.createTextNode('Related Documents'));
+          label.appendChild(document.createTextNode('All Related Documents'));
 
           // The cloned item has no React handlers, so give it its own hover state
           // and keep Vault's menu from treating the click as one of its actions.
@@ -2693,7 +2702,7 @@
           dialog.setAttribute('aria-labelledby', 'ez-related-docs-title');
           dialog.style.cssText = 'width:1040px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;background:#fff;color:#222;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.3);font-size:13px;overflow:hidden;';
 
-          const header = makeDialogHeader('ez-related-docs-title', 'EZ Related Documents',
+          const header = makeDialogHeader('ez-related-docs-title', 'EZ All Related Documents',
               closeRelatedDocsDialog, () => relatedLookupActive);
 
           const body = document.createElement('div');
